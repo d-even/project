@@ -23,14 +23,31 @@ export function initFraudDetection({ userId, threshold = 0.7 }: { userId: string
 
       const { riskScore, isNewUser } = await res.json();
 
+      const overThreshold = !isNewUser && riskScore > threshold;
+      // Dispatch a general result event for any UI to consume
+      const resultEvt = new CustomEvent("behavior-result", {
+        detail: { riskScore, isNewUser, overThreshold }
+      });
+      window.dispatchEvent(resultEvt);
+
       if (isNewUser) {
         console.log("✅ Profile stored for first time.");
       } else {
         console.log("Risk score:", riskScore);
-        if (riskScore > threshold) {
-          alert("⚠️ Suspicious behavior detected!");
+        if (overThreshold) {
+          try {
+            await fetch("/api/otp/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: userId })
+            });
+          } catch {}
+          const evt = new CustomEvent("behavior-risk", {
+            detail: { riskScore, action: "otp-required" }
+          });
+          window.dispatchEvent(evt);
         }
       }
-    }, 60_000);
+    }, 20_000);
   }
 }
